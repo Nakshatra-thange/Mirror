@@ -1,7 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +6,80 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(CANDIDATE)
+  createdAt DateTime @default(now())
+
+  hostedRooms   Room[]    @relation("HostedRooms")
+  sessions      Session[]
+}
+
+enum Role {
+  INTERVIEWER
+  CANDIDATE
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  title       String
+  hostId      String
+  host        User     @relation("HostedRooms", fields: [hostId], references: [id])
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  sessions    Session[]
+  problems    RoomProblem[]
+}
+
+model Problem {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  starterCode String   @default("")
+  difficulty  Difficulty @default(MEDIUM)
+  tags        String[]
+  createdAt   DateTime @default(now())
+
+  roomProblems RoomProblem[]
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model RoomProblem {
+  id        String  @id @default(cuid())
+  roomId    String
+  problemId String
+  order     Int     @default(0)
+  room      Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  problem   Problem @relation(fields: [problemId], references: [id])
+
+  @@unique([roomId, problemId])
+}
+
+model Session {
+  id              String   @id @default(cuid())
+  roomId          String
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  interviewerNotes String  @default("")
+  feedback         String  @default("")
+  finalCode        String  @default("")
+  rating           Int?
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+
+  @@unique([roomId, userId])
 }
