@@ -32,12 +32,21 @@ model Room {
   code        String   @unique
   title       String
   hostId      String
+  interviewerId String?
+  candidateId   String?
   host        User     @relation("HostedRooms", fields: [hostId], references: [id])
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
+  updatedAt     DateTime   @updatedAt
 
   sessions    Session[]
   problems    RoomProblem[]
+}
+
+enum RoomStatus {
+  WAITING
+  ACTIVE
+  ENDED
 }
 
 model Problem {
