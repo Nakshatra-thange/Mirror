@@ -1,51 +1,105 @@
 import { Server } from "socket.io";
 import type { Server as HttpServer } from "http";
-import cors from "cors";
+import { prisma } from "../lib/prisma.js";
+
 interface RoomPresence {
-    [roomCode: string]: {
-      [socketId: string]: { 
-        userId: string;
-         name: string; 
-         role: string };
-    };
-  }
+  [roomCode: string]: {
+    [socketId: string]: { userId: string; name: string; role: string };
+  };
+}
 
-  const presence : RoomPresence= {};
-  export function initSocket(httpServer : HttpServer, clientUrl: String){
-    const io = new Server(httpServer, {
-        cors: { origin: clientUrl, methods: ["GET", "POST"] },
-      })
+const presence: RoomPresence = {};
 
-      io.on("connection", (socket) => {
-        console.log(`Socket connected: ${socket.id}`);
+// Autosave buffer — flush to DB every 5s
+const codeBuffer: { [roomCode: string]: { code: string; language: string; dirty: boolean } } = {};
 
-        socket.on("room:join", ({ roomCode, userId, name, role }) => {
-            socket.join(roomCode);
-      
-        if (!presence[roomCode]) presence[roomCode] = {};
-            presence[roomCode][socket.id] = { userId, name, role };
-      
-            // Broadcast updated presence to everyone in room
-        io.to(roomCode).emit("room:presence", Object.values(presence[roomCode]));
-      
-        console.log(`${name} (${role}) joined room ${roomCode}`);
+export function initSocket(httpServer: HttpServer) {
+  const clientUrl = process.env.CLIENT_URL as string;
+
+  const io = new Server(httpServer, {
+    cors: { origin: clientUrl, methods: ["GET", "POST"] },
+  });
+
+  // Autosave interval
+  setInterval(async () => {
+    for (const roomCode in codeBuffer) {
+      const buf = codeBuffer[roomCode];
+      if (!buf.dirty) continue;
+      try {
+        await prisma.room.update({
+          where: { code: roomCode },
+          data: { currentCode: buf.code, currentLanguage: buf.language },
+        });
+        buf.dirty = false;
+      } catch {
+        // room may have ended, ignore
+      }
+    }
+  }, 5000);
+
+  io.on("connection", (socket) => {
+
+    // ── Presence ──────────────────────────────────────────
+    socket.on("room:join", ({ roomCode, userId, name, role }) => {
+      socket.join(roomCode);
+      if (!presence[roomCode]) presence[roomCode] = {};
+      presence[roomCode][socket.id] = { userId, name, role };
+      io.to(roomCode).emit("room:presence", Object.values(presence[roomCode]));
     });
 
     socket.on("room:ping", ({ roomCode }) => {
-        socket.to(roomCode).emit("room:pong", { from: socket.id });
-      });
-
-      socket.on("disconnect", () => {
-        for (const roomCode in presence) {
-          if (presence[roomCode][socket.id]) {
-            const user = presence[roomCode][socket.id];
-            delete presence[roomCode][socket.id];
-            io.to(roomCode).emit("room:presence", Object.values(presence[roomCode]));
-            io.to(roomCode).emit("room:user_left", { userId: user.userId, name: user.name });
-            console.log(`${user.name} left room ${roomCode}`);
-          }
-        }
-      });
+      socket.to(roomCode).emit("room:pong", { from: socket.id });
     });
-    return io;
-  }
+
+    // ── Editor sync ───────────────────────────────────────
+    // Send current code to newly joined user
+    socket.on("editor:request_sync", ({ roomCode }) => {
+      if (codeBuffer[roomCode]) {
+        socket.emit("editor:full_sync", {
+          code: codeBuffer[roomCode].code,
+          language: codeBuffer[roomCode].language,
+        });
+      }
+    });
+
+    // Broadcast code change to everyone else in room
+    socket.on("editor:change", ({ roomCode, code, language }) => {
+      if (!codeBuffer[roomCode]) {
+        codeBuffer[roomCode] = { code, language, dirty: true };
+      } else {
+        codeBuffer[roomCode].code = code;
+        codeBuffer[roomCode].language = language;
+        codeBuffer[roomCode].dirty = true;
+      }
+      // Broadcast to everyone except sender
+      socket.to(roomCode).emit("editor:change", { code, language });
+    });
+
+    // Language change
+    socket.on("editor:language_change", ({ roomCode, language }) => {
+      if (codeBuffer[roomCode]) codeBuffer[roomCode].language = language;
+      socket.to(roomCode).emit("editor:language_change", { language });
+    });
+
+    // ── Cursor positions ──────────────────────────────────
+    socket.on("editor:cursor", ({ roomCode, cursor, userId, name }) => {
+      socket.to(roomCode).emit("editor:cursor", { cursor, userId, name, socketId: socket.id });
+    });
+
+    // ── Disconnect ────────────────────────────────────────
+    socket.on("disconnect", () => {
+      for (const roomCode in presence) {
+        if (presence[roomCode][socket.id]) {
+          const user = presence[roomCode][socket.id];
+          delete presence[roomCode][socket.id];
+          io.to(roomCode).emit("room:presence", Object.values(presence[roomCode]));
+          io.to(roomCode).emit("room:user_left", { userId: user.userId, name: user.name });
+          // Remove cursor decoration for this socket
+          io.to(roomCode).emit("editor:cursor_remove", { socketId: socket.id });
+        }
+      }
+    });
+  });
+
+  return io;
+}

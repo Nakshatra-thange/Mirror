@@ -38,6 +38,8 @@ model Room {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt     DateTime   @updatedAt
+  currentCode     String   @default("")
+  currentLanguage String   @default("javascript")
 
   sessions    Session[]
   problems    RoomProblem[]
