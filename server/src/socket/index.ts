@@ -128,6 +128,11 @@ socket.on("webrtc:track_state", ({ roomCode, audio, video }) => {
   socket.to(roomCode).emit("webrtc:track_state", { audio, video });
 });
 
+// ── End session broadcast ─────────────────────────────
+socket.on("room:end", ({ roomCode }) => {
+  io.to(roomCode).emit("room:ended", { roomCode });
+});
+
     // ── Disconnect ────────────────────────────────────────
     socket.on("disconnect", () => {
       for (const roomCode in presence) {

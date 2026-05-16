@@ -104,6 +104,19 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+        <div className="flex items-center gap-4">
+  <span className="text-zinc-400 text-sm">{user?.name}</span>
+  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900 text-violet-300">{user?.role}</span>
+  {user?.role === "INTERVIEWER" && (
+    <button onClick={() => navigate("/sessions")}
+      className="text-zinc-400 hover:text-white text-sm transition-colors">
+      Sessions
+    </button>
+  )}
+  <button onClick={logout} className="text-zinc-500 hover:text-white text-sm transition-colors">
+    Sign out
+  </button>
+</div>
 
         {/* Room list — interviewers only */}
         {user?.role === "INTERVIEWER" && rooms.length > 0 && (
