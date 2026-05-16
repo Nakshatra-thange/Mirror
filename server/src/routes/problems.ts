@@ -12,7 +12,7 @@ router.get("/",authenticate, async (_, res)=>{
 });
 
 router.get("/:id",authenticate , async(req,res)=>{
-    const problem = await prisma.problem.findUnique({ where: { id: req.params.id } });
+    const problem = await prisma.problem.findUnique({ where: { id: String(req.params.id)} });
     if (!problem) return res.status(404).json({ error: "Problem not found" });
     return res.json(problem);
 })
@@ -33,7 +33,7 @@ router.post("/",authenticate, async (req: AuthRequest, res)=>{
 router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
     if (req.user?.role !== "INTERVIEWER") return res.status(403).json({ error: "Interviewers only" });
     const problem = await prisma.problem.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string},
       data: req.body,
     });
     return res.json(problem);
@@ -41,7 +41,7 @@ router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
 
   router.delete("/:id", authenticate, async (req: AuthRequest, res) => {
     if (req.user?.role !== "INTERVIEWER") return res.status(403).json({ error: "Interviewers only" });
-    await prisma.problem.delete({ where: { id: req.params.id } });
+    await prisma.problem.delete({ where: { id: req.params.id as string } });
     return res.status(204).send();
   });
   
@@ -55,7 +55,7 @@ router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
   
     // Set as active problem on room
     const updated = await prisma.room.update({
-      where: { code: req.params.code },
+      where: { code: req.params.code as string},
       data: { activeProblemId: problemId },
     });
   

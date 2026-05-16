@@ -35,7 +35,7 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
 // GET /rooms/:code — get room by code
 router.get("/:code", authenticate, async (req, res) => {
   const room = await prisma.room.findUnique({
-    where: { code: req.params.code },
+    where: { code: req.params.code as string},
     include: {
       host: { select: { id: true, name: true } },
       problems: { include: { problem: true }, orderBy: { order: "asc" } },
@@ -63,7 +63,7 @@ router.post("/:code/join", authenticate, async (req: AuthRequest, res) => {
   // Slot is free — assign as candidate
   if (!room.candidateId) {
     const updated = await prisma.room.update({
-      where: { code: req.params.code },
+      where: { code: req.params.code as string},
       data: {
         candidateId: userId,
         status: "ACTIVE",
@@ -90,12 +90,12 @@ router.post("/:code/join", authenticate, async (req: AuthRequest, res) => {
 
 // PATCH /rooms/:code/end — interviewer ends session
 router.patch("/:code/end", authenticate, async (req: AuthRequest, res) => {
-  const room = await prisma.room.findUnique({ where: { code: req.params.code } });
+  const room = await prisma.room.findUnique({ where: { code: req.params.code as string} });
   if (!room) return res.status(404).json({ error: "Room not found" });
   if (room.interviewerId !== req.user!.id) return res.status(403).json({ error: "Only interviewer can end" });
 
   const updated = await prisma.room.update({
-    where: { code: req.params.code },
+    where: { code: req.params.code as string},
     data: { status: "ENDED" },
   });
 
