@@ -47,6 +47,25 @@ export function initSocket(httpServer: HttpServer) {
       io.to(roomCode).emit("room:presence", Object.values(presence[roomCode]));
     });
 
+    socket.on("room:problem_set", ({ roomCode, problem }) => {
+      // Broadcast to everyone including sender's other tab,
+      // but skip candidate seeing interviewer-only events
+      socket.to(roomCode).emit("room:problem_set", { problem });
+    });
+
+    socket.on("notepad:save", async ({ roomCode, userId, notes }) => {
+      try {
+        await prisma.session.updateMany({
+          where: { room: { code: roomCode }, userId },
+          data: { interviewerNotes: notes },
+        });
+      } catch {
+        // session may not exist yet
+      }
+    });
+
+    
+
     socket.on("room:ping", ({ roomCode }) => {
       socket.to(roomCode).emit("room:pong", { from: socket.id });
     });
