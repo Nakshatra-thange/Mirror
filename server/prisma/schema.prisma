@@ -91,17 +91,35 @@ model RoomProblem {
 }
 
 model Session {
-  id              String   @id @default(cuid())
-  roomId          String
-  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  interviewerNotes String  @default("")
-  feedback         String  @default("")
-  finalCode        String  @default("")
-  rating           Int?
-  startedAt        DateTime @default(now())
+  id               String        @id @default(cuid())
+  roomId           String
+  room             Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  interviewerNotes String        @default("")
+  finalCode        String        @default("")
+  language         String        @default("javascript")
+
+  // Feedback fields
+  verdict          Verdict?
+  rating           Int?          // 1-5
+  communicationScore Int?        // 1-5
+  problemSolvingScore Int?       // 1-5
+  codeQualityScore   Int?        // 1-5
+  feedbackSummary  String        @default("")
+  strengths        String        @default("")
+  improvements     String        @default("")
+  feedbackLockedAt DateTime?
+
+  startedAt        DateTime      @default(now())
   endedAt          DateTime?
 
   @@unique([roomId, userId])
+}
+
+enum Verdict {
+  STRONG_HIRE
+  HIRE
+  NO_HIRE
+  STRONG_NO_HIRE
 }

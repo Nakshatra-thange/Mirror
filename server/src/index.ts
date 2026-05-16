@@ -7,6 +7,8 @@ import roomRoutes from "./routes/rooms.js";
 import { initSocket } from "./socket/index.js";
 import problemRoutes from "./routes/problems.js";
 import executeRoutes from "./routes/execute.js";
+import sessionRoutes from "./routes/sessions.js";
+import reportRoutes  from "./routes/reports.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -18,6 +20,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/problems", problemRoutes);
 app.use("/api/execute", executeRoutes);
+
+app.use("/api/sessions", sessionRoutes);
+app.use("/api/reports",  reportRoutes);
 
 app.get("/api/health", (_, res) => res.json({ status: "ok", app: "mirror" }));
 initSocket(httpServer, process.env.CLIENT_URL!);

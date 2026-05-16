@@ -1,0 +1,145 @@
+import PDFDocument from "pdfkit";
+import type { Response } from "express";
+
+interface SessionData {
+  id: string;
+  startedAt: Date;
+  endedAt: Date | null;
+  verdict: string | null;
+  rating: number | null;
+  communicationScore: number | null;
+  problemSolvingScore: number | null;
+  codeQualityScore: number | null;
+  feedbackSummary: string;
+  strengths: string;
+  improvements: string;
+  finalCode: string;
+  language: string;
+  interviewerNotes: string;
+  room: { title: string; code: string; activeProblem: { title: string } | null };
+  user: { name: string; email: string };
+}
+
+function stars(score: number | null) {
+  if (!score) return "N/A";
+  return "★".repeat(score) + "☆".repeat(5 - score) + ` (${score}/5)`;
+}
+
+function duration(start: Date, end: Date | null) {
+  if (!end) return "Ongoing";
+  const mins = Math.round((end.getTime() - start.getTime()) / 60000);
+  return `${mins} minutes`;
+}
+
+export function generatePDF(session: SessionData, res: Response) {
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="mirror-report-${session.id.slice(0, 8)}.pdf"`
+  );
+  doc.pipe(res);
+
+  // ── Header ────────────────────────────────────────────
+  doc
+    .fontSize(24).font("Helvetica-Bold").text("Mirror", 50, 50)
+    .fontSize(10).font("Helvetica").fillColor("#666")
+    .text("Interview Feedback Report", 50, 80);
+
+  doc.moveTo(50, 100).lineTo(545, 100).strokeColor("#e5e7eb").stroke();
+
+  // ── Session meta ──────────────────────────────────────
+  doc.fillColor("#111").fontSize(16).font("Helvetica-Bold")
+    .text(session.room.title, 50, 115);
+
+  doc.fontSize(9).font("Helvetica").fillColor("#666")
+    .text(`Candidate: ${session.user.name} · ${session.user.email}`, 50, 137)
+    .text(`Room code: ${session.room.code}`, 50, 150)
+    .text(`Date: ${session.startedAt.toLocaleDateString("en-US", { dateStyle: "long" })}`, 50, 163)
+    .text(`Duration: ${duration(session.startedAt, session.endedAt)}`, 50, 176);
+
+  if (session.room.activeProblem) {
+    doc.text(`Problem: ${session.room.activeProblem.title}`, 50, 189);
+  }
+
+  // ── Verdict badge ─────────────────────────────────────
+  if (session.verdict) {
+    const verdictColors: Record<string, string> = {
+      STRONG_HIRE:    "#16a34a",
+      HIRE:           "#2563eb",
+      NO_HIRE:        "#d97706",
+      STRONG_NO_HIRE: "#dc2626",
+    };
+    const color = verdictColors[session.verdict] ?? "#666";
+    const label = session.verdict.replace("_", " ");
+
+    doc.roundedRect(50, 208, 130, 24, 4).fillColor(color).fill();
+    doc.fillColor("#fff").fontSize(10).font("Helvetica-Bold")
+      .text(label, 50, 214, { width: 130, align: "center" });
+  }
+
+  doc.moveTo(50, 245).lineTo(545, 245).strokeColor("#e5e7eb").stroke();
+
+  // ── Scores ────────────────────────────────────────────
+  doc.fillColor("#111").fontSize(13).font("Helvetica-Bold").text("Scores", 50, 258);
+
+  const scores = [
+    ["Overall",          session.rating],
+    ["Communication",    session.communicationScore],
+    ["Problem Solving",  session.problemSolvingScore],
+    ["Code Quality",     session.codeQualityScore],
+  ];
+
+  let y = 278;
+  scores.forEach(([label, score]) => {
+    doc.fontSize(9).font("Helvetica").fillColor("#666").text(String(label), 50, y);
+    doc.fillColor("#111").text(stars(score as number | null), 160, y);
+    y += 16;
+  });
+
+  doc.moveTo(50, y + 8).lineTo(545, y + 8).strokeColor("#e5e7eb").stroke();
+  y += 22;
+
+  // ── Written feedback ──────────────────────────────────
+  function section(title: string, content: string) {
+    if (!content?.trim()) return;
+    doc.fillColor("#111").fontSize(13).font("Helvetica-Bold").text(title, 50, y);
+    y += 18;
+    doc.fontSize(9).font("Helvetica").fillColor("#333")
+      .text(content, 50, y, { width: 495, lineGap: 3 });
+    y += doc.heightOfString(content, { width: 495 }) + 16;
+
+    // Page break guard
+    if (y > 720) { doc.addPage(); y = 50; }
+  }
+
+  section("Summary",      session.feedbackSummary);
+  section("Strengths",    session.strengths);
+  section("Improvements", session.improvements);
+
+  // ── Final code ────────────────────────────────────────
+  if (session.finalCode?.trim()) {
+    if (y > 600) { doc.addPage(); y = 50; }
+
+    doc.moveTo(50, y).lineTo(545, y).strokeColor("#e5e7eb").stroke();
+    y += 14;
+
+    doc.fillColor("#111").fontSize(13).font("Helvetica-Bold")
+      .text(`Final Code (${session.language})`, 50, y);
+    y += 18;
+
+    doc.fontSize(7.5).font("Courier").fillColor("#1e1e1e")
+      .rect(50, y, 495, Math.min(doc.heightOfString(session.finalCode, { width: 480 }) + 16, 300))
+      .fill("#f8f8f8");
+
+    doc.fillColor("#1e1e1e")
+      .text(session.finalCode, 58, y + 8, { width: 480, lineGap: 2 });
+  }
+
+  // ── Footer ────────────────────────────────────────────
+  doc.fontSize(7).fillColor("#aaa")
+    .text("Generated by Mirror · interview platform", 50, 800, { align: "center" });
+
+  doc.end();
+}

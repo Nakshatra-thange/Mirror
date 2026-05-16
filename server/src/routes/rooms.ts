@@ -49,7 +49,7 @@ router.get("/:code", authenticate, async (req, res) => {
 
 // POST /rooms/:code/join — candidate joins, assigns role
 router.post("/:code/join", authenticate, async (req: AuthRequest, res) => {
-  const room = await prisma.room.findUnique({ where: { code: req.params.code } });
+  const room = await prisma.room.findUnique({ where: { code: req.params.code as string} });
   if (!room) return res.status(404).json({ error: "Room not found" });
   if (room.status === "ENDED") return res.status(410).json({ error: "Room has ended" });
 
@@ -90,16 +90,31 @@ router.post("/:code/join", authenticate, async (req: AuthRequest, res) => {
 
 // PATCH /rooms/:code/end — interviewer ends session
 router.patch("/:code/end", authenticate, async (req: AuthRequest, res) => {
-  const room = await prisma.room.findUnique({ where: { code: req.params.code as string} });
+  const room = await prisma.room.findUnique({
+    where: { code: req.params.code as string},
+    include: { sessions: true },
+  });
   if (!room) return res.status(404).json({ error: "Room not found" });
-  if (room.interviewerId !== req.user!.id) return res.status(403).json({ error: "Only interviewer can end" });
+  if (room.interviewerId !== req.user!.id) {
+    return res.status(403).json({ error: "Only interviewer can end" });
+  }
 
+  // Lock room + snapshot final state
   const updated = await prisma.room.update({
     where: { code: req.params.code as string},
-    data: { status: "ENDED" },
+    data: { status: "ENDED", isActive: false },
+  });
+
+  // Stamp endedAt on all sessions
+  await prisma.session.updateMany({
+    where: { roomId: room.id, endedAt: null },
+    data: {
+      endedAt: new Date(),
+      finalCode: room.currentCode,
+      language: room.currentLanguage,
+    },
   });
 
   return res.json(updated);
 });
-
 export default router;

@@ -50,7 +50,7 @@ router.patch("/:id", authenticate, async (req: AuthRequest, res) => {
     if (req.user?.role !== "INTERVIEWER") return res.status(403).json({ error: "Interviewers only" });
     const { problemId } = req.body;
   
-    const room = await prisma.room.findUnique({ where: { code: req.params.code } });
+    const room = await prisma.room.findUnique({ where: { code: req.params.code as string} });
     if (!room) return res.status(404).json({ error: "Room not found" });
   
     // Set as active problem on room
