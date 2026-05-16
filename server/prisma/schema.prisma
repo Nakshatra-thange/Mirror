@@ -43,6 +43,9 @@ model Room {
 
   sessions    Session[]
   problems    RoomProblem[]
+
+  activeProblemId String?
+  activeProblem   Problem? @relation("ActiveProblem", fields: [activeProblemId], references: [id])
 }
 
 enum RoomStatus {
@@ -61,6 +64,7 @@ model Problem {
   createdAt   DateTime @default(now())
 
   roomProblems RoomProblem[]
+  activeInRooms Room[] @relation("ActiveProblem")
 }
 
 enum Difficulty {
