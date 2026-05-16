@@ -1,3 +1,7 @@
+import OutputPanel from "../components/room/OutputPanel";
+import { useExecution } from "../hooks/useExecution";
+import { useExecutionStore } from "../store/execution";
+
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -29,11 +33,16 @@ export default function Room() {
   const { code: editorCode, language, setCode, setLanguage } = useEditorStore();
   const { isInterviewer } = useRole();
   const navigate = useNavigate();
+  
 
   const [roomTitle, setRoomTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
   const [rightTab, setRightTab] = useState<"problem" | "notes">("problem");
+
+  const { result, running, error } = useExecutionStore();
+const { run } = useExecution(code!);
+const [outputOpen, setOutputOpen] = useState(false);
 
   useEffect(() => {
     if (!code || !user) return;
@@ -67,11 +76,28 @@ export default function Room() {
     socket.on("room:problem_set", ({ problem }) => {
       setActiveProblem(problem);
     });
+    socket.on("execution:start", () => {
+      useExecutionStore.getState().setRunning();
+      setOutputOpen(true);
+    });
+    
+    socket.on("execution:result", ({ result }) => {
+      useExecutionStore.getState().setResult(result);
+      setOutputOpen(true);
+    });
+    
+    socket.on("execution:error", ({ error }) => {
+      useExecutionStore.getState().setError(error);
+      setOutputOpen(true);
+    });
 
     return () => {
       socket.off("room:presence");
       socket.off("editor:language_change");
       socket.off("room:problem_set");
+      socket.off("execution:start");
+socket.off("execution:result");
+socket.off("execution:error");
       socket.disconnect();
       clearRoom();
     };
@@ -127,28 +153,55 @@ export default function Room() {
       <div className="flex-1 flex overflow-hidden">
 
         {/* Left — Code Editor */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
-            <LanguageSelector value={language} onChange={handleLanguageChange} />
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-600">autosaved</span>
-              <button className="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-400 transition-colors">
-                Run ▶ (Day 5)
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <CollabEditor
-              roomCode={code!}
-              userId={user!.id}
-              userName={user!.name}
-              language={language}
-              value={editorCode}
-              onChange={setCode}
-              onLanguageChange={handleLanguageChange}
-            />
-          </div>
+        {/* Left — Code Editor */}
+<div className="flex-1 flex flex-col overflow-hidden">
+  {/* Editor toolbar */}
+  <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
+    <LanguageSelector value={language} onChange={handleLanguageChange} />
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-zinc-600">autosaved</span>
+      <button
+        onClick={() => { run(); setOutputOpen(true); }}
+        disabled={running}
+        className="text-xs px-4 py-1.5 bg-violet-600 hover:bg-violet-500
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   rounded font-medium text-white transition-colors flex items-center gap-1.5">
+        {running
+          ? <><span className="w-2.5 h-2.5 rounded-full border border-white border-t-transparent animate-spin" /> Running</>
+          : <>▶ Run</>}
+      </button>
+    </div>
+  </div>
+
+  {/* Editor + Output stacked */}
+  <div className="flex-1 flex flex-col overflow-hidden">
+    {/* Editor takes remaining space */}
+    <div className={`overflow-hidden transition-all ${outputOpen ? "flex-1" : "flex-1"}`}>
+      <CollabEditor
+        roomCode={code!}
+        userId={user!.id}
+        userName={user!.name}
+        language={language}
+        value={editorCode}
+        onChange={setCode}
+        onLanguageChange={handleLanguageChange}
+      />
+    </div>
+
+    {/* Output drawer — slides up from bottom */}
+    {outputOpen && (
+      <div className="h-52 shrink-0 border-t border-zinc-800 flex flex-col bg-zinc-950">
+        <div className="shrink-0 flex items-center justify-between px-4 py-1.5 border-b border-zinc-800">
+          <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Output</span>
+          <button onClick={() => setOutputOpen(false)} className="text-zinc-600 hover:text-zinc-400 text-xs">✕</button>
         </div>
+        <div className="flex-1 overflow-hidden">
+          <OutputPanel result={result} running={running} error={error} />
+        </div>
+      </div>
+    )}
+  </div>
+</div>
 
         {/* Right panel */}
         <div className="w-80 shrink-0 flex flex-col border-l border-zinc-800 overflow-hidden">
