@@ -105,6 +105,29 @@ export function initSocket(httpServer: HttpServer) {
       socket.to(roomCode).emit("editor:cursor", { cursor, userId, name, socketId: socket.id });
     });
 
+    // ── WebRTC Signaling ──────────────────────────────────
+socket.on("webrtc:offer", ({ roomCode, offer }) => {
+  socket.to(roomCode).emit("webrtc:offer", { offer, from: socket.id });
+});
+
+socket.on("webrtc:answer", ({ roomCode, answer }) => {
+  socket.to(roomCode).emit("webrtc:answer", { answer, from: socket.id });
+});
+
+socket.on("webrtc:ice_candidate", ({ roomCode, candidate }) => {
+  socket.to(roomCode).emit("webrtc:ice_candidate", { candidate, from: socket.id });
+});
+
+// Notify peer that this user is ready to start WebRTC
+socket.on("webrtc:ready", ({ roomCode }) => {
+  socket.to(roomCode).emit("webrtc:peer_ready", { from: socket.id });
+});
+
+// Notify peer of track state changes (mute/camera)
+socket.on("webrtc:track_state", ({ roomCode, audio, video }) => {
+  socket.to(roomCode).emit("webrtc:track_state", { audio, video });
+});
+
     // ── Disconnect ────────────────────────────────────────
     socket.on("disconnect", () => {
       for (const roomCode in presence) {
