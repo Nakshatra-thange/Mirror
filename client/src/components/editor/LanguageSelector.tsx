@@ -1,4 +1,5 @@
-import { LANGUAGES, LanguageValue } from "../../constants/languages";
+import { LANGUAGES} from "../../constants/languages";
+import type {LanguageValue } from "../../constants/languages";
 
 interface Props {
   value: LanguageValue;

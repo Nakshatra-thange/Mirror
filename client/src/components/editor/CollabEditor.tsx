@@ -1,8 +1,9 @@
 import { useEffect, useRef, useCallback } from "react";
-import Editor, { OnMount, OnChange } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
+import type { OnMount, OnChange } from "@monaco-editor/react"
 import type * as Monaco from "monaco-editor";
 import { socket } from "../../lib/socket";
-import { LanguageValue } from "../../constants/languages";
+import type { LanguageValue } from "../../constants/languages";
 
 interface CursorDecoration {
   userId: string;
