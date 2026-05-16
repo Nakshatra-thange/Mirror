@@ -5,18 +5,35 @@ import { socket } from "../lib/socket";
 import { useAuthStore } from "../store/auth";
 import { useRoomStore } from "../store/room";
 import { useEditorStore } from "../store/editor";
+import { useRole } from "../hooks/useRole";
 import CollabEditor from "../components/editor/CollabEditor";
 import LanguageSelector from "../components/editor/LanguageSelector";
+import ProblemPanel from "../components/room/ProblemPanel";
+import ProblemPicker from "../components/room/ProblemPicker";
+import PrivateNotepad from "../components/room/PrivateNotepad";
 import type { LanguageValue } from "../constants/languages";
+
+interface Problem {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  tags: string[];
+  starterCode: string;
+}
 
 export default function Room() {
   const { code } = useParams<{ code: string }>();
   const { user } = useAuthStore();
-  const { sessionRole, participants, setRoom, setParticipants, clearRoom } = useRoomStore();
+  const { participants, setRoom, setParticipants, clearRoom } = useRoomStore();
   const { code: editorCode, language, setCode, setLanguage } = useEditorStore();
+  const { isInterviewer } = useRole();
   const navigate = useNavigate();
+
   const [roomTitle, setRoomTitle] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
+  const [rightTab, setRightTab] = useState<"problem" | "notes">("problem");
 
   useEffect(() => {
     if (!code || !user) return;
@@ -25,9 +42,9 @@ export default function Room() {
       .then(({ data }) => {
         setRoom(code, data.room.title, data.sessionRole);
         setRoomTitle(data.room.title);
-        // Load persisted code if any
         if (data.room.currentCode) setCode(data.room.currentCode);
         if (data.room.currentLanguage) setLanguage(data.room.currentLanguage as LanguageValue);
+        if (data.room.activeProblem) setActiveProblem(data.room.activeProblem);
 
         socket.connect();
         socket.emit("room:join", {
@@ -41,13 +58,20 @@ export default function Room() {
       .catch(() => navigate("/dashboard"));
 
     socket.on("room:presence", setParticipants);
+
     socket.on("editor:language_change", ({ language: lang }) => {
       setLanguage(lang as LanguageValue);
+    });
+
+    // Candidate receives problem swap
+    socket.on("room:problem_set", ({ problem }) => {
+      setActiveProblem(problem);
     });
 
     return () => {
       socket.off("room:presence");
       socket.off("editor:language_change");
+      socket.off("room:problem_set");
       socket.disconnect();
       clearRoom();
     };
@@ -58,8 +82,19 @@ export default function Room() {
     socket.emit("editor:language_change", { roomCode: code, language: lang });
   }
 
+  function handleProblemSelect(problem: Problem) {
+    setActiveProblem(problem);
+    // Load starter code into editor
+    if (problem.starterCode) {
+      setCode(problem.starterCode);
+      socket.emit("editor:change", { roomCode: code, code: problem.starterCode, language });
+    }
+    // Broadcast problem to candidate
+    socket.emit("room:problem_set", { roomCode: code, problem });
+  }
+
   if (loading) return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500 text-sm">
       Connecting to room...
     </div>
   );
@@ -71,9 +106,9 @@ export default function Room() {
       <nav className="shrink-0 border-b border-zinc-800 px-5 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="font-bold tracking-tight text-sm">mirror</span>
-          <span className="text-zinc-600">·</span>
-          <span className="text-zinc-300 text-sm">{roomTitle}</span>
-          <span className="font-mono text-xs text-zinc-600">{code}</span>
+          <span className="text-zinc-700">·</span>
+          <span className="text-zinc-300 text-sm truncate max-w-xs">{roomTitle}</span>
+          <span className="font-mono text-xs text-zinc-700">{code}</span>
         </div>
         <div className="flex items-center gap-3">
           {participants.map(p => (
@@ -83,7 +118,7 @@ export default function Room() {
             </div>
           ))}
           <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/60 text-violet-300 border border-violet-800">
-            {sessionRole}
+            {isInterviewer ? "INTERVIEWER" : "CANDIDATE"}
           </span>
         </div>
       </nav>
@@ -93,18 +128,15 @@ export default function Room() {
 
         {/* Left — Code Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Editor toolbar */}
           <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
             <LanguageSelector value={language} onChange={handleLanguageChange} />
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-600">autosaved</span>
-              {/* Code execution button — Day 5 */}
               <button className="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-400 transition-colors">
                 Run ▶ (Day 5)
               </button>
             </div>
           </div>
-
           <div className="flex-1 overflow-hidden">
             <CollabEditor
               roomCode={code!}
@@ -121,23 +153,44 @@ export default function Room() {
         {/* Right panel */}
         <div className="w-80 shrink-0 flex flex-col border-l border-zinc-800 overflow-hidden">
 
-          {/* Problem panel — Day 4 */}
-          <div className="flex-1 overflow-y-auto p-4 border-b border-zinc-800">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-3">Problem</p>
-            <div className="text-zinc-600 text-sm">Problem panel — Day 4</div>
+          {/* Tab bar — interviewer gets both tabs */}
+          <div className="shrink-0 flex border-b border-zinc-800">
+            <button
+              onClick={() => setRightTab("problem")}
+              className={`flex-1 text-xs py-2.5 font-medium transition-colors
+                ${rightTab === "problem"
+                  ? "text-white border-b-2 border-violet-500"
+                  : "text-zinc-500 hover:text-zinc-300"}`}>
+              Problem
+            </button>
+            {isInterviewer && (
+              <button
+                onClick={() => setRightTab("notes")}
+                className={`flex-1 text-xs py-2.5 font-medium transition-colors
+                  ${rightTab === "notes"
+                    ? "text-white border-b-2 border-violet-500"
+                    : "text-zinc-500 hover:text-zinc-300"}`}>
+                My Notes
+              </button>
+            )}
           </div>
 
-          {/* Private notepad — INTERVIEWER only, Day 4 */}
-          {sessionRole === "INTERVIEWER" && (
-            <div className="h-52 flex flex-col p-4">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">
-                Private Notes <span className="text-violet-500">· only you</span>
-              </p>
-              <div className="flex-1 text-zinc-600 text-sm flex items-center justify-center border border-dashed border-zinc-800 rounded-lg">
-                Notepad — Day 4
-              </div>
+          {/* Problem picker — interviewer only, shown above problem */}
+          {isInterviewer && rightTab === "problem" && (
+            <div className="shrink-0 px-3 py-2 border-b border-zinc-800 flex justify-end">
+              <ProblemPicker roomCode={code!} onSelect={handleProblemSelect} />
             </div>
           )}
+
+          {/* Panel content */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {rightTab === "problem" && (
+              <ProblemPanel problem={activeProblem} />
+            )}
+            {rightTab === "notes" && isInterviewer && (
+              <PrivateNotepad roomCode={code!} userId={user!.id} />
+            )}
+          </div>
         </div>
       </div>
     </div>

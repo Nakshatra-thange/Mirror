@@ -39,6 +39,8 @@ router.get("/:code", authenticate, async (req, res) => {
     include: {
       host: { select: { id: true, name: true } },
       problems: { include: { problem: true }, orderBy: { order: "asc" } },
+      sessions: { select: { userId: true, interviewerNotes: true } },
+      activeProblem: true,
     },
   });
   if (!room) return res.status(404).json({ error: "Room not found" });
