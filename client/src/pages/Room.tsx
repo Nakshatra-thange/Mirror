@@ -1,7 +1,7 @@
 import OutputPanel from "../components/room/OutputPanel";
 import { useExecution } from "../hooks/useExecution";
 import { useExecutionStore } from "../store/execution";
-
+import VideoPanel from "../components/room/VideoPanel";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -204,7 +204,50 @@ socket.off("execution:error");
 </div>
 
         {/* Right panel */}
-        <div className="w-80 shrink-0 flex flex-col border-l border-zinc-800 overflow-hidden">
+<div className="w-80 shrink-0 flex flex-col border-l border-zinc-800 overflow-hidden">
+
+{/* Video — always visible at top of right panel */}
+<div className="shrink-0 border-b border-zinc-800">
+  <VideoPanel roomCode={code!} userName={user!.name} />
+</div>
+
+{/* Tab bar */}
+<div className="shrink-0 flex border-b border-zinc-800">
+  <button
+    onClick={() => setRightTab("problem")}
+    className={`flex-1 text-xs py-2.5 font-medium transition-colors
+      ${rightTab === "problem"
+        ? "text-white border-b-2 border-violet-500"
+        : "text-zinc-500 hover:text-zinc-300"}`}>
+    Problem
+  </button>
+  {isInterviewer && (
+    <button
+      onClick={() => setRightTab("notes")}
+      className={`flex-1 text-xs py-2.5 font-medium transition-colors
+        ${rightTab === "notes"
+          ? "text-white border-b-2 border-violet-500"
+          : "text-zinc-500 hover:text-zinc-300"}`}>
+      My Notes
+    </button>
+  )}
+</div>
+
+{/* Problem picker */}
+{isInterviewer && rightTab === "problem" && (
+  <div className="shrink-0 px-3 py-2 border-b border-zinc-800 flex justify-end">
+    <ProblemPicker roomCode={code!} onSelect={handleProblemSelect} />
+  </div>
+)}
+
+{/* Panel content */}
+<div className="flex-1 overflow-hidden flex flex-col">
+  {rightTab === "problem" && <ProblemPanel problem={activeProblem} />}
+  {rightTab === "notes" && isInterviewer && (
+    <PrivateNotepad roomCode={code!} userId={user!.id} />
+  )}
+</div>
+</div>
 
           {/* Tab bar — interviewer gets both tabs */}
           <div className="shrink-0 flex border-b border-zinc-800">
